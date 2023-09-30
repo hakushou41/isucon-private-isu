@@ -373,7 +373,10 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN (442, 1717, 4365, 5022, 6720, 6753, 7523, 7901)\G
 ```
 
-## 対応1:comments テーブルのpost_idにインデックスを貼る (2553 -> 16959)
+## クエリチューニング 
+
+
+### 対応1:comments テーブルのpost_idにインデックスを貼る (2553 -> 16959)
 
 ```
 mysql> EXPLAIN SELECT `post_id` FROM `comments` WHERE `post_id` = 9986 ORDER BY `created_at` DESC LIMIT 3\G
@@ -445,3 +448,88 @@ Create Table: CREATE TABLE `comments` (
 {"pass":true,"score":16959,"success":15550,"fail":0,"messages":[]}
 ```
 
+
+### 対応2: 
+
+
+posts テーブルのuser_idにインデックスを貼る? (16959->)
+
+
+```
+❯ pt-query-digest --limit 5 ./private-isu-slow.log
+
+# 470ms user time, 50ms system time, 76.77M rss, 389.98G vsz
+# Current date: Sun Oct  1 00:15:44 2023
+# Hostname: NQ4TRW3RH6.local
+# Files: ./private-isu-slow.log
+# Overall: 38 total, 15 unique, 0.14 QPS, 0.03x concurrency ______________
+# Time range: 2023-09-30T15:04:39 to 2023-09-30T15:09:17
+# Attribute          total     min     max     avg     95%  stddev  median
+# ============     ======= ======= ======= ======= ======= ======= =======
+# Exec time             8s   100ms   633ms   204ms   526ms   148ms   122ms
+# Lock time           89us       0    65us     2us     2us    10us     1us
+# Rows sent        214.91k       0   9.84k   5.66k   9.80k   4.70k   9.33k
+# Rows examine     430.56k       0  19.68k  11.33k  19.40k   9.56k  19.40k
+# Query size        12.46M      39   2.06M 335.85k 1009.33k 511.10k  136.99
+
+# Profile
+# Rank Query ID                            Response time Calls R/Call V/M
+# ==== =================================== ============= ===== ====== ====
+#    1 0x4858CF4D8CAA743E839C127C71B69E75   2.1059 27.2%    17 0.1239  0.01 SELECT posts
+#    2 0x7A12D0C8F433684C3027353C36CAB572   0.6575  8.5%     5 0.1315  0.01 SELECT posts
+#    3 0x6A269077529B42C980CF9B85CA78C823   0.6328  8.2%     1 0.6328  0.00 INSERT posts
+#    4 0x21BC5C642709C7A69346157F417F4ED3   0.6291  8.1%     1 0.6291  0.00 INSERT posts
+#    5 0x0400753AFD6607E513289FE3693A273B   0.5410  7.0%     1 0.5410  0.00 INSERT posts
+# MISC 0xMISC                               3.1867 41.1%    13 0.2451   0.0 <10 ITEMS>
+
+# Query 1: 0.30 QPS, 0.04x concurrency, ID 0x4858CF4D8CAA743E839C127C71B69E75 at byte 13074526
+# Scores: V/M = 0.01
+# Time range: 2023-09-30T15:08:20 to 2023-09-30T15:09:17
+# Attribute    pct   total     min     max     avg     95%  stddev  median
+# ============ === ======= ======= ======= ======= ======= ======= =======
+# Count         44      17
+# Exec time     27      2s   100ms   214ms   124ms   171ms    31ms   105ms
+# Lock time     17    16us       0     4us       0     1us       0     1us
+# Rows sent     77 166.63k   9.77k   9.84k   9.80k   9.80k   37.50   9.80k
+# Rows examine  77 333.26k  19.53k  19.68k  19.60k  19.40k       0  19.40k
+# Query size     0   1.53k      92      92      92      92       0      92
+# String:
+# Databases    isuconp
+# Hosts        webapp-app-1.webapp_default
+# Users        root
+# Query_time distribution
+#   1us
+#  10us
+# 100us
+#   1ms
+#  10ms
+# 100ms  ################################################################
+#    1s
+#  10s+
+# Tables
+#    SHOW TABLE STATUS FROM `isuconp` LIKE 'posts'\G
+#    SHOW CREATE TABLE `isuconp`.`posts`\G
+# EXPLAIN /*!50100 PARTITIONS*/
+SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC\G
+
+
+
+
+
+mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: posts
+   partitions: NULL
+         type: ALL
+possible_keys: NULL
+          key: NULL
+      key_len: NULL
+          ref: NULL
+         rows: 8118
+     filtered: 100.00
+        Extra: Using filesort
+1 row in set, 1 warning (0.00 sec)
+
+```
