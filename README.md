@@ -16,23 +16,24 @@ docker-compose.yaml mysqlについて、デフォルトのcpu1,memory:1gだと
 
 # やったこと
 
-## 1.初回ベンチ
+## 初回ベンチ
 
 ```
 ❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
 {"pass":true,"score":2553,"success":2450,"fail":0,"messages":[]}
 ```
 
-## 2.アクセスログとスロークエリの有効化と初回解析
+## [準備]アクセスログとスロークエリの有効化と初回解析
 
 
-### 2-1.アクセスログ解析
+### アクセスログ解析
 
 - ツール : kataribe
     - https://github.com/matsuu/kataribe
 
 ```
 ❯ cat access.log| kataribe
+
 Top 20 Sort By Count
 Count    Total    Mean  Stddev    Min  P50.0  P90.0  P95.0  P99.0    Max  2xx  3xx  4xx  5xx  TotalBytes   MinBytes  MeanBytes   MaxBytes  Request
   417    0.267  0.0006  0.0010  0.000  0.000  0.001  0.002  0.005  0.008  417    0    0    0      645933       1549       1549       1549  GET /css/style.css HTTP/1.1
@@ -195,6 +196,8 @@ TOP 37 Slow Requests
 
 
 ```
+pt-query-digest --limit 5 ./private-isu-slow.log
+
 # 560ms user time, 20ms system time, 81.14M rss, 390.11G vsz
 # Current date: Sat Sep 30 23:25:25 2023
 # Hostname: NQ4TRW3RH6.local
@@ -369,3 +372,76 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 # EXPLAIN /*!50100 PARTITIONS*/
 SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN (442, 1717, 4365, 5022, 6720, 6753, 7523, 7901)\G
 ```
+
+## 対応1:comments テーブルのpost_idにインデックスを貼る (2553 -> 16959)
+
+```
+mysql> EXPLAIN SELECT `post_id` FROM `comments` WHERE `post_id` = 9986 ORDER BY `created_at` DESC LIMIT 3\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: comments
+   partitions: NULL
+         type: ALL
+possible_keys: NULL
+          key: NULL
+      key_len: NULL
+          ref: NULL
+         rows: 96138
+     filtered: 10.00
+        Extra: Using where; Using filesort
+1 row in set, 1 warning (0.00 sec)
+
+mysql> alter table comments add index postid_idx (post_id);
+Query OK, 0 rows affected (0.16 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> show index from comments
+    -> ;
++----------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| Table    | Non_unique | Key_name   | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment | Visible | Expression |
++----------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| comments |          0 | PRIMARY    |            1 | id          | A         |       96138 |     NULL |   NULL |      | BTREE      |         |               | YES     | NULL       |
+| comments |          1 | postid_idx |            1 | post_id     | A         |       10155 |     NULL |   NULL |      | BTREE      |         |               | YES     | NULL       |
++----------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+2 rows in set (0.01 sec)
+
+mysql> EXPLAIN SELECT * FROM `comments` WHERE `post_id` = 9986 ORDER BY `created_at` DESC LIMIT 3\G
+*************************** 1. row ***************************
+           id: 1
+  select_type: SIMPLE
+        table: comments
+   partitions: NULL
+         type: ref
+possible_keys: postid_idx
+          key: postid_idx
+      key_len: 4
+          ref: const
+         rows: 10
+     filtered: 100.00
+        Extra: Using filesort
+1 row in set, 1 warning (0.00 sec)
+
+
+mysql> SHOW CREATE TABLE comments \G
+*************************** 1. row ***************************
+       Table: comments
+Create Table: CREATE TABLE `comments` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `post_id` int NOT NULL,
+  `user_id` int NOT NULL,
+  `comment` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `postid_idx` (`post_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=100001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+```
+
+- dump.sqlに、恒久的にインデックスを追加する
+
+```
+❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
+{"pass":true,"score":16959,"success":15550,"fail":0,"messages":[]}
+```
+
