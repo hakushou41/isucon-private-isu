@@ -533,13 +533,13 @@ Create Table: CREATE TABLE `posts` (
 {"pass":true,"score":21644,"success":19893,"fail":0,"messages":[]}
 ```
 
-### 対応3: posts テーブル (21644 -> )
+### 対応3[getIndex]posts テーブル (21644 -> 26230)
 
 - "/"を見る限り最新の20件が取れていれば良さそう
 
-#### [対応3]変更1:ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
+#### 変更1:ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
 
-- golang/app.go
+- golang/app.go getIndex
 
 ```
 389
@@ -636,7 +636,7 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 ```
 
 
-#### [対応3] 変更2:idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
+#### 変更2:idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
 
 - golang/app.go getIndex
 
