@@ -14,6 +14,12 @@ golang使用
 docker-compose.yaml mysqlについて、デフォルトのcpu1,memory:1gだと
 初回ベンチマークがタイムアウトするため、cpu2,memory:2gのベンチマークを初期値とした。
 
+## ツール
+
+- リソースモニタリング : docker desktop (->本番は、netdata)
+- スロークエリ解析 : pt-query-digest
+- アクセス解析 : kataribe
+
 # やったこと
 
 ## 初回ベンチ
@@ -537,7 +543,7 @@ Create Table: CREATE TABLE `posts` (
 
 - "/"を見る限り最新の20件が取れていれば良さそう
 
-#### 変更1:ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
+#### 変更1:[getIndex] ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
 
 - golang/app.go getIndex
 
@@ -636,7 +642,7 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 ```
 
 
-#### 変更2:idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
+#### 変更2:[getIndex]idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
 
 - golang/app.go getIndex
 
