@@ -449,11 +449,102 @@ Create Table: CREATE TABLE `comments` (
 ```
 
 
-### 対応2: 
+### 対応2: [getAccountName]posts テーブルのuser_idにインデックスを貼る (16959->21644)
+
+- golang/app.go
+
+```
+435
+	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = ? ORDER BY `created_at` DESC", user.ID)
+```
+
+```
+mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = 234 ORDER BY `created_at` DESC
+    -> ;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra                       |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+|  1 | SIMPLE      | posts | NULL       | ALL  | NULL          | NULL | NULL    | NULL | 8118 |    10.00 | Using where; Using filesort |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql> show index from posts ;
++-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| Table | Non_unique | Key_name | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment | Visible | Expression |
++-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| posts |          0 | PRIMARY  |            1 | id          | A         |        8038 |     NULL |   NULL |      | BTREE      |         |               | YES     | NULL       |
++-------+------------+----------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+1 row in set (0.01 sec)
+
+mysql> SHOW CREATE TABLE posts\G
+*************************** 1. row ***************************
+       Table: posts
+Create Table: CREATE TABLE `posts` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `mime` varchar(64) NOT NULL,
+  `imgdata` mediumblob NOT NULL,
+  `body` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=10081 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+1 row in set (0.00 sec)
+
+mysql> alter table posts add index userid_idx (user_id);
+Query OK, 0 rows affected (0.05 sec)
+Records: 0  Duplicates: 0  Warnings: 0
+
+mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = 234 ORDER BY `created_at` DESC ;
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+----------------+
+| id | select_type | table | partitions | type | possible_keys | key        | key_len | ref   | rows | filtered | Extra          |
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+----------------+
+|  1 | SIMPLE      | posts | NULL       | ref  | userid_idx    | userid_idx | 4       | const |   12 |   100.00 | Using filesort |
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+----------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql> show index from posts ;
++-------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| Table | Non_unique | Key_name   | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment | Visible | Expression |
++-------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+| posts |          0 | PRIMARY    |            1 | id          | A         |        8038 |     NULL |   NULL |      | BTREE      |         |               | YES     | NULL       |
+| posts |          1 | userid_idx |            1 | user_id     | A         |        1000 |     NULL |   NULL |      | BTREE      |         |               | YES     | NULL       |
++-------+------------+------------+--------------+-------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+
+2 rows in set (0.00 sec)
+
+mysql> SHOW CREATE TABLE posts\G
+*************************** 1. row ***************************
+       Table: posts
+Create Table: CREATE TABLE `posts` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `mime` varchar(64) NOT NULL,
+  `imgdata` mediumblob NOT NULL,
+  `body` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `userid_idx` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=10081 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+1 row in set (0.00 sec)
+```
 
 
-posts テーブルのuser_idにインデックスを貼る? (16959->)
+```
+❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
+{"pass":true,"score":21644,"success":19893,"fail":0,"messages":[]}
+```
 
+### 対応3: posts テーブル (21644 -> )
+
+- "/"を見る限り最新の20件が取れていれば良さそう
+
+#### [対応3]変更1:ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
+
+- golang/app.go
+
+```
+389
+	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC")
+```
 
 ```
 ❯ pt-query-digest --limit 5 ./private-isu-slow.log
@@ -513,9 +604,6 @@ posts テーブルのuser_idにインデックスを貼る? (16959->)
 SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC\G
 
 
-
-
-
 mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC\G
 *************************** 1. row ***************************
            id: 1
@@ -531,5 +619,48 @@ possible_keys: NULL
      filtered: 100.00
         Extra: Using filesort
 1 row in set, 1 warning (0.00 sec)
+```
 
+```
+❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
+{"pass":true,"score":22138,"success":21519,"fail":156,"messages":["1ページに表示される画像の数が足りません (GET /)"]}
+```
+
+```
+SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC LIMIT 50
+```
+
+```
+❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
+{"pass":true,"score":25660,"success":23304,"fail":0,"messages":[]}
+```
+
+
+#### [対応3] 変更2:idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
+
+- golang/app.go getIndex
+
+```
+389
+	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `id` DESC LIMIT 50")
+```
+
+- ORDER BY created_atとidの比較
+
+```
+mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC LIMIT 50 ;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+| id | select_type | table | partitions | type | possible_keys | key  | key_len | ref  | rows | filtered | Extra          |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+|  1 | SIMPLE      | posts | NULL       | ALL  | NULL          | NULL | NULL    | NULL | 9463 |   100.00 | Using filesort |
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+----------------+
+1 row in set, 1 warning (0.00 sec)
+
+mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `id` DESC LIMIT 50 ;
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+---------------------+
+| id | select_type | table | partitions | type  | possible_keys | key     | key_len | ref  | rows | filtered | Extra               |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+---------------------+
+|  1 | SIMPLE      | posts | NULL       | index | NULL          | PRIMARY | 4       | NULL |   50 |   100.00 | Backward index scan |
++----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+---------------------+
+1 row in set, 1 warning (0.00 sec)
 ```
