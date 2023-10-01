@@ -30,8 +30,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1g
+          cpus: '2'
+          memory: 2g
 
   mysql:
     image: mysql:8.0

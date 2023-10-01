@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -692,6 +693,14 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		ext == "gif" && post.Mime == "image/gif" {
 		w.Header().Set("Content-Type", post.Mime)
 		_, err := w.Write(post.Imgdata)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+		
+		filename := "../public/img/" + pidStr + "." + ext
+		err = ioutil.WriteFile(filename, post.Imgdata, 0644)
+		os.Chmod(filename, 0666)
 		if err != nil {
 			log.Print(err)
 			return

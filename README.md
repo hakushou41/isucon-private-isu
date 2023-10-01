@@ -667,3 +667,76 @@ mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts`
 +----+-------------+-------+------------+-------+---------------+---------+---------+------+------+----------+---------------------+
 1 row in set, 1 warning (0.00 sec)
 ```
+
+## 対応4:画像をnginxから返すように変更
+
+- ボトルネックが移った
+- postsへのINSERTに時間が掛かるようになった
+- 画像データをデータベースから返している -> サイズも膨大になりよくないので、nginxから返すように変更する
+- getImageのたびに、ファイルに書き出して、画像が存在すればnginxから返すように変更する
+
+
+```
+❯ pt-query-digest --limit 5 ./private-isu-slow.log
+
+# 500ms user time, 20ms system time, 68.86M rss, 389.99G vsz
+# Current date: Sun Oct  1 03:17:50 2023
+# Hostname: NQ4TRW3RH6.local
+# Files: ./private-isu-slow.log
+# Overall: 16 total, 15 unique, 0.32 QPS, 0.10x concurrency ______________
+# Time range: 2023-09-30T17:52:06 to 2023-09-30T17:52:56
+# Attribute          total     min     max     avg     95%  stddev  median
+# ============     ======= ======= ======= ======= ======= ======= =======
+# Exec time             5s   101ms   637ms   310ms   609ms   163ms   308ms
+# Lock time              0       0       0       0       0       0       0
+# Rows sent              0       0       0       0       0       0       0
+# Rows examine           0       0       0       0       0       0       0
+# Query size        14.64M 666.42k 1015.04k 937.27k 1009.33k  90.05k 961.27k
+
+# Profile
+# Rank Query ID                            Response time Calls R/Call V/M
+# ==== =================================== ============= ===== ====== ====
+#    1 0x449DC96436426B5F62CB20FAEF1D7EDC   0.6365 12.9%     1 0.6365  0.00 INSERT posts
+#    2 0x749EE441F3BBB3EF43A6A4CB639176E3   0.6319 12.8%     1 0.6319  0.00 INSERT posts
+#    3 0x1A5F3BFD000B91F9687B2E8F47508D04   0.5239 10.6%     1 0.5239  0.00 INSERT posts
+#    4 0x41E8431FD63603452E4E26772F65A5AB   0.4360  8.8%     1 0.4360  0.00 INSERT posts
+#    5 0xC00815FEDFFE74574997AD66653850F3   0.3760  7.6%     1 0.3760  0.00 INSERT posts
+# MISC 0xMISC                               2.3487 47.4%    11 0.2135   0.0 <10 ITEMS>
+
+# Query 1: 0 QPS, 0x concurrency, ID 0x449DC96436426B5F62CB20FAEF1D7EDC at byte 10495676
+# Scores: V/M = 0.00
+# Time range: all events occurred at 2023-09-30T17:52:45
+# Attribute    pct   total     min     max     avg     95%  stddev  median
+# ============ === ======= ======= ======= ======= ======= ======= =======
+# Count          6       1
+# Exec time     12   637ms   637ms   637ms   637ms   637ms       0   637ms
+# Lock time      0       0       0       0       0       0       0       0
+# Rows sent      0       0       0       0       0       0       0       0
+# Rows examine   0       0       0       0       0       0       0       0
+# Query size     6 932.45k 932.45k 932.45k 932.45k 932.45k       0 932.45k
+# String:
+# Databases    isuconp
+# Hosts        localhost
+# Users        root
+# Query_time distribution
+#   1us
+#  10us
+# 100us
+#   1ms
+#  10ms
+# 100ms  ################################################################
+INSERT INTO `posts` VALUES (8819,496,'image/jpeg',0xFFD8FFE00 ....
+
+mysql> show columns from posts;
++------------+-------------+------+-----+-------------------+-------------------+
+| Field      | Type        | Null | Key | Default           | Extra             |
++------------+-------------+------+-----+-------------------+-------------------+
+| id         | int         | NO   | PRI | NULL              | auto_increment    |
+| user_id    | int         | NO   | MUL | NULL              |                   |
+| mime       | varchar(64) | NO   |     | NULL              |                   |
+| imgdata    | mediumblob  | NO   |     | NULL              |                   |
+| body       | text        | NO   |     | NULL              |                   |
+| created_at | timestamp   | NO   |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
++------------+-------------+------+-----+-------------------+-------------------+
+6 rows in set (0.01 sec)
+```
