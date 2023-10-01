@@ -379,10 +379,7 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN (442, 1717, 4365, 5022, 6720, 6753, 7523, 7901)\G
 ```
 
-## クエリチューニング 
-
-
-### 対応1:comments テーブルのpost_idにインデックスを貼る (2553 -> 16959)
+## 対応1:comments テーブルのpost_idにインデックスを貼る (2553 -> 16959)
 
 ```
 mysql> EXPLAIN SELECT `post_id` FROM `comments` WHERE `post_id` = 9986 ORDER BY `created_at` DESC LIMIT 3\G
@@ -455,7 +452,7 @@ Create Table: CREATE TABLE `comments` (
 ```
 
 
-### 対応2: [getAccountName]posts テーブルのuser_idにインデックスを貼る (16959->21644)
+## 対応2: [getAccountName]posts テーブルのuser_idにインデックスを貼る (16959->21644)
 
 - golang/app.go
 
@@ -539,11 +536,11 @@ Create Table: CREATE TABLE `posts` (
 {"pass":true,"score":21644,"success":19893,"fail":0,"messages":[]}
 ```
 
-### 対応3[getIndex]posts テーブル (21644 -> 26230)
+## 対応3[getIndex]posts テーブル (21644 -> 26230)
 
 - "/"を見る限り最新の20件が取れていれば良さそう
 
-#### 変更1:[getIndex] ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
+### 変更1:[getIndex] ベンチを実行すると50は画像がある必要がありそうなので、LIMIT 50とする (21644 -> 25660)
 
 - golang/app.go getIndex
 
@@ -642,7 +639,7 @@ SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `crea
 ```
 
 
-#### 変更2:[getIndex]idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
+### 変更2:[getIndex]idは、autoincrementであり、順番に追加されているため、created_idをソートせず、indexが使われるidでソートするようにする (25660 ->26230)
 
 - golang/app.go getIndex
 
