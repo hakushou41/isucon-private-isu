@@ -668,7 +668,7 @@ mysql> EXPLAIN SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts`
 1 row in set, 1 warning (0.00 sec)
 ```
 
-## 対応4:画像をnginxから返すように変更
+## 対応4:画像をnginxから返すように変更 (26230->38905)
 
 - ボトルネックが移った
 - postsへのINSERTに時間が掛かるようになった
@@ -739,4 +739,9 @@ mysql> show columns from posts;
 | created_at | timestamp   | NO   |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
 +------------+-------------+------+-----+-------------------+-------------------+
 6 rows in set (0.01 sec)
+```
+
+```
+❯ docker run --network host -i private-isu-benchmarker /opt/go/bin/benchmarker -t http://host.docker.internal -u /opt/go/userdata
+{"pass":true,"score":38905,"success":34789,"fail":0,"messages":[]}
 ```
