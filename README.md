@@ -5,7 +5,7 @@ https://github.com/catatsuy/private-isu#private-isu
 
 ## 期日
 
-10/17 3-shakeの感想戦まで
+10/17 感想戦まで
 
 ## 前提
 
