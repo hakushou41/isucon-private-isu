@@ -19,6 +19,7 @@ docker-compose.yaml mysqlについて、デフォルトのcpu1,memory:1gだと
 - リソースモニタリング : docker desktop (->本番は、netdata)
 - スロークエリ解析 : pt-query-digest
 - アクセス解析 : kataribe
+- プロファイル : pprof
 
 # やったこと
 
